@@ -189,7 +189,7 @@ control MyIngress(inout headers hdr,
 	meta.one_time_pad_dst = (bit<32>) (result >> 32);
     }
 
-    // Perform decryption, remove IPv6 header, and restore IPv4 header
+    // Performs decryption, removes IPv6 header, and restores IPv4 header
     action decrypt(bit<64> key_src_0, bit<64> key_dst_0, bit<64> key_src_1, bit<64> key_dst_1, bit<64> key_src_2, bit<64> key_dst_2) {
 	// Get version
        bit<2> version = (bit<2>)(hdr.ipv6.dstAddr >> 62);
@@ -229,7 +229,7 @@ control MyIngress(inout headers hdr,
 	hdr.ipv6.setInvalid();	
     }
 
-    // Perform encryption, remove IPv4 header, and add IPv6 header
+    // Performs encryption, removes IPv4 header, and adds IPv6 header
     action encrypt(bit<64> key_src_0, bit<64> key_dst_0, bit<64> key_src_1, bit<64> key_dst_1, bit<64> key_src_2, bit<64> key_dst_2, 
                                   bit<2> version) {
 	// Set version
@@ -280,7 +280,7 @@ control MyIngress(inout headers hdr,
         meta.needs_dec = 1;
     }
     
-    // Forward IPv4 packets
+    // Forwards IPv4 packets
     action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
         standard_metadata.egress_spec = port;
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
@@ -288,7 +288,7 @@ control MyIngress(inout headers hdr,
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
 
-    // Forward IPv6 packets
+    // Forwards IPv6 packets
     action ipv6_forward(macAddr_t dstAddr, egressSpec_t port) {
         standard_metadata.egress_spec = port;
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
