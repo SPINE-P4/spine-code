@@ -4,6 +4,7 @@
 
 const bit<16> TYPE_IPV4 = 0x800;
 const bit<16> TYPE_IPV6 = 0x86DD;
+const bit<8> TYPE_TCP = 0x6;
 const bit<4> VERSION_IPV4 = 0x4;
 const bit<4> VERSION_IPV6 = 0x6;
 const bit<64> const_1 = 0x736f6d6570736575;
@@ -53,6 +54,13 @@ header ipv6_t {
     bit<128> dstAddr;
 }
 
+header tcp_t {
+    bit<16>    src_port;
+    bit<16>    dst_port;
+    bit<32>    seq_no;
+    bit<32> ack_no;
+}
+
 struct metadata {
     bit<64> key_src_1;
     bit<64> key_dst_1;
@@ -75,6 +83,7 @@ struct headers {
     ethernet_t   ethernet;
     ipv4_t       ipv4;
     ipv6_t       ipv6;
+    tcp_t         tcp;
 }
 
 /*************************************************************************
@@ -101,11 +110,22 @@ parser MyParser(packet_in packet,
 
     state parse_ipv4 {
         packet.extract(hdr.ipv4);
-        transition accept;
+        transition select(hdr.ipv4.protocol) {
+            TYPE_TCP: parse_tcp;
+            default: accept;
+        }
     }
 
     state parse_ipv6 {
 	packet.extract(hdr.ipv6); 
+        transition select(hdr.ipv6.next_header) {
+            TYPE_TCP: parse_tcp;
+            default: accept;
+        }
+    }
+
+    state parse_tcp {
+	packet.extract(hdr.tcp); 
         transition accept;     
     }
 
@@ -218,7 +238,12 @@ control MyIngress(inout headers hdr,
 	hdr.ipv4.srcAddr = hdr.ipv4.srcAddr ^ meta.one_time_pad_src;
 	hdr.ipv4.dstAddr = hdr.ipv4.dstAddr ^ meta.one_time_pad_dst;
 
-        sip_hash((bit<64>) meta.nonce, meta.key_src_2, meta.key_dst_2);
+        // Decrypt TCP sequence and acknowledgment numbers if present
+        if (hdr.tcp.isValid()) {
+            sip_hash((bit<64>) meta.nonce, meta.key_src_2, meta.key_dst_2);
+            hdr.tcp.seq_no = hdr.tcp.seq_no ^ meta.one_time_pad_src;
+            hdr.tcp.ack_no = hdr.tcp.ack_no ^ meta.one_time_pad_dst;
+        }
 
 	hdr.ipv6.setInvalid();	
     }
@@ -250,15 +275,21 @@ control MyIngress(inout headers hdr,
 	    meta.key_dst_2 = key_dst_2_2;
 	}
         
-	// Encrypt IPv4 addresses and add IPv6 header
+	// Encrypt IPv4 addresses
 	random(meta.nonce , (bit<30>) 0, (bit<30>) ((1 << 30) - 1)); 	
 	sip_hash((bit<64>) meta.nonce, meta.key_src_1, meta.key_dst_1);
 
 	hdr.ipv4.srcAddr = hdr.ipv4.srcAddr ^ meta.one_time_pad_src;
 	hdr.ipv4.dstAddr = hdr.ipv4.dstAddr ^ meta.one_time_pad_dst;
 
-        sip_hash((bit<64>) meta.nonce, meta.key_src_2, meta.key_dst_2);
+        // Encrypt TCP sequence and acknowledgment numbers if present
+        if (hdr.tcp.isValid()) {
+            sip_hash((bit<64>) meta.nonce, meta.key_src_2, meta.key_dst_2);
+            hdr.tcp.seq_no = hdr.tcp.seq_no ^ meta.one_time_pad_src;
+            hdr.tcp.ack_no = hdr.tcp.ack_no ^ meta.one_time_pad_dst;
+        }
 
+        // Add IPv6 header
         hdr.ipv6.setValid();
         hdr.ethernet.etherType = TYPE_IPV6;
 	hdr.ipv6.dstAddr = meta.new_addr + ((bit<128>)(meta.version) << 62) + ((bit<128>)(meta.nonce) << 32) +  (bit<128>)hdr.ipv4.dstAddr;
@@ -297,6 +328,17 @@ control MyIngress(inout headers hdr,
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
         hdr.ethernet.dstAddr = dstAddr;
 	hdr.ipv6.hop_limit = hdr.ipv6.hop_limit - 1;
+    }
+
+    table print_tcp {
+        key = {
+	    hdr.tcp.seq_no: exact;   
+        }
+        actions = {
+	    NoAction;
+        }
+        size = 1024;
+        default_action = NoAction;
     }
 
     table ipv6_lpm {
@@ -376,6 +418,10 @@ control MyIngress(inout headers hdr,
     }
     
     apply {
+	if (hdr.tcp.isValid()) {
+            print_tcp.apply();
+        }
+
 	if (hdr.ipv6.isValid()) {
             check_for_decrypt.apply();
 	    do_decrypt.apply();
@@ -434,6 +480,7 @@ control MyDeparser(packet_out packet, in headers hdr) {
         packet.emit(hdr.ethernet);
         packet.emit(hdr.ipv6);
         packet.emit(hdr.ipv4);
+        packet.emit(hdr.tcp);
     }
 }
 
