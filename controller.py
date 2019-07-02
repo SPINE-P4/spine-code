@@ -27,14 +27,20 @@ def updateKeysAndVersionNumber(keys, p4info_helper, ingress_sws):
 	        	"meta.needs_enc": 1
   	    		},
 	            	action_name="MyIngress.encrypt",
-	            	action_params={    
-	                        "key_src_0": keys[0],
-	                        "key_dst_0": keys[1],
-	                        "key_src_1": keys[2],
-	                        "key_dst_1": keys[3],
-	                        "key_src_2": keys[4],
-	                        "key_dst_2": keys[5],
-	                        "version": keys[6]
+	            	action_params={  
+                                "key_src_0_1": keys[0],
+                                "key_dst_0_1": keys[1],
+                                "key_src_0_2": keys[2],
+	                        "key_dst_0_2": keys[3],
+	                        "key_src_1_1": keys[4],
+	                        "key_dst_1_1": keys[5],
+                                "key_src_1_2": keys[6],
+	                        "key_dst_1_2": keys[7],
+	                        "key_src_2_1": keys[8],
+	                        "key_dst_2_1": keys[9],
+                                "key_src_2_2": keys[10],
+	                        "key_dst_2_2": keys[11],
+	                        "version": keys[12] 
 		        })
         	ingress_sw.ModifyTableEntry(table_entry)
 	
@@ -45,12 +51,18 @@ def updateKeysAndVersionNumber(keys, p4info_helper, ingress_sws):
   	    		},
             		action_name="MyIngress.decrypt",
 	            	action_params={
-                                "key_src_0": keys[0],
-	                        "key_dst_0": keys[1],
-	                        "key_src_1": keys[2],
-	                        "key_dst_1": keys[3],
-	                        "key_src_2": keys[4],
-	                        "key_dst_2": keys[5]            
+                                "key_src_0_1": keys[0],
+	                        "key_dst_0_1": keys[1],
+                                "key_src_0_2": keys[2],
+	                        "key_dst_0_2": keys[3],
+	                        "key_src_1_1": keys[4],
+	                        "key_dst_1_1": keys[5],
+                                "key_src_1_2": keys[6],
+	                        "key_dst_1_2": keys[7],
+	                        "key_src_2_1": keys[8],
+	                        "key_dst_2_1": keys[9],
+                                "key_src_2_2": keys[10],
+	                        "key_dst_2_2": keys[11]   
             		})
         	ingress_sw.ModifyTableEntry(table_entry)
 		
@@ -144,14 +156,19 @@ def writeBorderRouterRules(dst_ipv4_addrs, dst_ipv6_addrs, dst_enc_addrs, dst_de
         },
         action_name="MyIngress.encrypt",
         action_params={
-	    "key_src_0": keys[0],
-	    "key_dst_0": keys[1],
-	    "key_src_1": keys[2],
-	    "key_dst_1": keys[3],
-	    "key_src_2": keys[4],
-	    "key_dst_2": keys[5],
-	    "version": keys[6],
-            
+	    "key_src_0_1": keys[0],
+	    "key_dst_0_1": keys[1],
+            "key_src_0_2": keys[2],
+	    "key_dst_0_2": keys[3],
+	    "key_src_1_1": keys[4],
+	    "key_dst_1_1": keys[5],
+            "key_src_1_2": keys[6],
+	    "key_dst_1_2": keys[7],
+	    "key_src_2_1": keys[8],
+	    "key_dst_2_1": keys[9],
+            "key_src_2_2": keys[10],
+	    "key_dst_2_2": keys[11],
+	    "version": keys[12]            
         })
     ingress_sw.WriteTableEntry(table_entry)
     print "Installed rule on %s" % ingress_sw.name
@@ -176,12 +193,18 @@ def writeBorderRouterRules(dst_ipv4_addrs, dst_ipv6_addrs, dst_enc_addrs, dst_de
         },
         action_name="MyIngress.decrypt",
         action_params={
-	    "key_src_0": keys[0],
-	    "key_dst_0": keys[1],
-	    "key_src_1": keys[2],
-	    "key_dst_1": keys[3],
-	    "key_src_2": keys[4],
-	    "key_dst_2": keys[5]            
+	    "key_src_0_1": keys[0],
+	    "key_dst_0_1": keys[1],
+            "key_src_0_2": keys[2],
+	    "key_dst_0_2": keys[3],
+	    "key_src_1_1": keys[4],
+	    "key_dst_1_1": keys[5],
+            "key_src_1_2": keys[6],
+	    "key_dst_1_2": keys[7],
+	    "key_src_2_1": keys[8],
+	    "key_dst_2_1": keys[9],
+            "key_src_2_2": keys[10],
+	    "key_dst_2_2": keys[11]          
         })
     ingress_sw.WriteTableEntry(table_entry)
     print "Installed rule on %s" % ingress_sw.name
@@ -277,11 +300,17 @@ def main(p4info_file_path, bmv2_file_path):
         # Generate first set of keys
         key1_1 = long(random.getrandbits(64))
         key1_2 = long(random.getrandbits(64))
+	key1_3 = long(random.getrandbits(64))
+        key1_4 = long(random.getrandbits(64))
 	key2_1 = long(random.getrandbits(64))
         key2_2 = long(random.getrandbits(64))
+	key2_3 = long(random.getrandbits(64))
+        key2_4 = long(random.getrandbits(64))
 	key3_1 = long(random.getrandbits(64))
         key3_2 = long(random.getrandbits(64))
-        keys = [key1_1, key1_2, key2_1, key2_2, key3_1, key3_2, 0]
+        key3_3 = long(random.getrandbits(64))
+        key3_4 = long(random.getrandbits(64))
+        keys = [key1_1, key1_2, key1_3, key1_4, key2_1, key2_2, key2_3, key2_4, key3_1, key3_2, key3_3, key3_4, 0]
 
         # Install rules for Router 1
 	ipv4_dst_addrs_s1 = {}
@@ -347,11 +376,14 @@ def main(p4info_file_path, bmv2_file_path):
                 sleep(5)
                 print "changing keys: " + str(i)
                 # update version
-                keys[6] = i % 3
+                keys[12] = i % 3
                 # update appropriate keys
                 slot_to_update = (i + 1) % 3
-                keys[2 * slot_to_update] = long(random.getrandbits(64))
-                keys[2 * slot_to_update + 1] = long(random.getrandbits(64))
+                keys[4 * slot_to_update] = long(random.getrandbits(64))
+                keys[4 * slot_to_update + 1] = long(random.getrandbits(64))
+                keys[4 * slot_to_update + 2] = long(random.getrandbits(64))
+                keys[4 * slot_to_update + 3] = long(random.getrandbits(64))
+                
                 
                 updateKeysAndVersionNumber(keys, p4info_helper, ingress_sws=[s1, s3])                
                 i += 1

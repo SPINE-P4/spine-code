@@ -54,8 +54,10 @@ header ipv6_t {
 }
 
 struct metadata {
-    bit<64> key_src;
-    bit<64> key_dst;
+    bit<64> key_src_1;
+    bit<64> key_dst_1;
+    bit<64> key_src_2;
+    bit<64> key_dst_2;
     bit<32> one_time_pad_src;
     bit<32> one_time_pad_dst;
     bit<30> nonce;
@@ -63,6 +65,10 @@ struct metadata {
     ip6Addr_t new_addr;
     bit<1> needs_enc;
     bit<1> needs_dec;
+    bit<64> v0;
+    bit<64> v1;
+    bit<64> v2; 
+    bit<64> v3;
 }
 
 struct headers {
@@ -125,87 +131,73 @@ control MyIngress(inout headers hdr,
         mark_to_drop();
     }
 
+    // Helper function for SipHash 
+    action sip_round() {
+	meta.v0 = meta.v0 + meta.v1;
+	meta.v2 = meta.v2 + meta.v3;
+	meta.v1 = (bit<64>) (meta.v1 << 13);
+	meta.v3 = (bit<64>) (meta.v3 << 16);
+	meta.v1 = meta.v1 ^ meta.v0;
+	meta.v3 = meta.v3 ^ meta.v2;
+	meta.v0 = (bit<64>) (meta.v0 << 32);
+	meta.v2 = meta.v2 + meta.v1;
+	meta.v0 = meta.v0 + meta.v3;
+	meta.v1 = (bit<64>) (meta.v1 << 17);
+	meta.v3 = (bit<64>) (meta.v3 << 21);
+	meta.v1 = meta.v1 ^ meta.v2;
+	meta.v3 = meta.v3 ^ meta.v0;
+	meta.v2 = (bit<64>) (meta.v2 << 32);
+    }
+
     // Performs SipHash 
-    action sip_hash(bit<64> message) {
-        bit<64> v0 = meta.key_src ^ const_1;
-        bit<64> v1 = meta.key_dst ^ const_2;
-        bit<64> v2 = meta.key_src ^ const_3;
-        bit<64> v3 = meta.key_dst ^ const_4;	
+    action sip_hash(bit<64> message, bit<64> key_src, bit<64> key_dst) {
+        meta.v0 = key_src ^ const_1;
+        meta.v1 = key_dst ^ const_2;
+        meta.v2 = key_src ^ const_3;
+        meta.v3 = key_dst ^ const_4;	
 
-	v3 = v3 ^ message;
+	meta.v3 = meta.v3 ^ message;
 
-	v0 = v0 + v1;
-	v2 = v2 + v3;
-	v1 = (bit<64>) (v1 << 13);
-	v3 = (bit<64>) (v3 << 16);
-	v1 = v1 ^ v0;
-	v3 = v3 ^ v2;
-	v0 = (bit<64>) (v0 << 32);
-	v2 = v2 + v1;
-	v0 = v0 + v3;
-	v1 = (bit<64>) (v1 << 17);
-	v3 = (bit<64>) (v3 << 21);
-	v1 = v1 ^ v2;
-	v3 = v3 ^ v0;
-	v2 = (bit<64>) (v2 << 32);
+	sip_round();
 
-	v0 = v0 ^ message;
+	meta.v0 = meta.v0 ^ message;
 
-	v2 = v2 ^ 0x00000000000000ff;	
+	meta.v2 = meta.v2 ^ 0x00000000000000ff;	
 
-	v0 = v0 + v1;
-	v2 = v2 + v3;
-	v1 = (bit<64>) (v1 << 13);
-	v3 = (bit<64>) (v3 << 16);
-	v1 = v1 ^ v0;
-	v3 = v3 ^ v2;
-	v0 = (bit<64>) (v0 << 32);
-	v2 = v2 + v1;
-	v0 = v0 + v3;
-	v1 = (bit<64>) (v1 << 17);
-	v3 = (bit<64>) (v3 << 21);
-	v1 = v1 ^ v2;
-	v3 = v3 ^ v0;
-	v2 = (bit<64>) (v2 << 32);
+	sip_round();
+	sip_round();
 
-	v0 = v0 + v1;
-	v2 = v2 + v3;
-	v1 = (bit<64>) (v1 << 13);
-	v3 = (bit<64>) (v3 << 16);
-	v1 = v1 ^ v0;
-	v3 = v3 ^ v2;
-	v0 = (bit<64>) (v0 << 32);
-	v2 = v2 + v1;
-	v0 = v0 + v3;
-	v1 = (bit<64>) (v1 << 17);
-	v3 = (bit<64>) (v3 << 21);
-	v1 = v1 ^ v2;
-	v3 = v3 ^ v0;
-	v2 = (bit<64>) (v2 << 32);
-
-	bit<64> result = v0 ^ v1 ^ v2 ^ v3;
+	bit<64> result = meta.v0 ^ meta.v1 ^ meta.v2 ^ meta.v3;
 
 	meta.one_time_pad_src = (bit<32>) result;
 	meta.one_time_pad_dst = (bit<32>) (result >> 32);
     }
 
-    // Performs decryption, removes IPv6 header, and restores IPv4 header
-    action decrypt(bit<64> key_src_0, bit<64> key_dst_0, bit<64> key_src_1, bit<64> key_dst_1, bit<64> key_src_2, bit<64> key_dst_2) {
+    // Perform decryption, remove IPv6 header, and restore IPv4 header
+    action decrypt(bit<64> key_src_0_1, bit<64> key_dst_0_1, bit<64> key_src_1_1, bit<64> key_dst_1_1, 
+                                   bit<64> key_src_2_1, bit<64> key_dst_2_1, bit<64> key_src_0_2, bit<64> key_dst_0_2, 
+                                   bit<64> key_src_1_2, bit<64> key_dst_1_2, bit<64> key_src_2_2, bit<64> key_dst_2_2) {
 	// Get version
        bit<2> version = (bit<2>)(hdr.ipv6.dstAddr >> 62);
 
        // Get appropriate keys
        if (version == 0) {
-            meta.key_src = key_src_0;
-	    meta.key_dst = key_dst_0;
+            meta.key_src_1 = key_src_0_1;
+	    meta.key_dst_1 = key_dst_0_1;
+	    meta.key_src_2 = key_src_0_2;
+	    meta.key_dst_2 = key_dst_0_2;
 	}
 	else if (version == 1) {
-            meta.key_src = key_src_1;
-	    meta.key_dst = key_dst_1;
+            meta.key_src_1 = key_src_1_1;
+	    meta.key_dst_1 = key_dst_1_1;
+	    meta.key_src_2 = key_src_1_2;
+	    meta.key_dst_2 = key_dst_1_2;
 	}
 	else {
-            meta.key_src = key_src_2;
-	    meta.key_dst = key_dst_2;
+            meta.key_src_1 = key_src_2_1;
+	    meta.key_dst_1 = key_dst_2_1;
+            meta.key_src_2 = key_src_2_2;
+	    meta.key_dst_2 = key_dst_2_2;
 	}
 
         // Decrypt IPv4 addresses and restore IPv4 header
@@ -221,40 +213,51 @@ control MyIngress(inout headers hdr,
 	hdr.ipv4.diffserv = hdr.ipv6.traffic_class;
 
 	meta.nonce = (bit<30>)(hdr.ipv6.dstAddr >> 32);
-	sip_hash((bit<64>) meta.nonce);
+	sip_hash((bit<64>) meta.nonce, meta.key_src_1, meta.key_dst_1);
 
 	hdr.ipv4.srcAddr = hdr.ipv4.srcAddr ^ meta.one_time_pad_src;
 	hdr.ipv4.dstAddr = hdr.ipv4.dstAddr ^ meta.one_time_pad_dst;
 
+        sip_hash((bit<64>) meta.nonce, meta.key_src_2, meta.key_dst_2);
+
 	hdr.ipv6.setInvalid();	
     }
 
-    // Performs encryption, removes IPv4 header, and adds IPv6 header
-    action encrypt(bit<64> key_src_0, bit<64> key_dst_0, bit<64> key_src_1, bit<64> key_dst_1, bit<64> key_src_2, bit<64> key_dst_2, 
-                                  bit<2> version) {
+    // Perform encryption, remove IPv4 header, and add IPv6 header
+    action encrypt(bit<64> key_src_0_1, bit<64> key_dst_0_1, bit<64> key_src_1_1, bit<64> key_dst_1_1, bit<64> key_src_2_1, bit<64> key_dst_2_1,
+				   bit<64> key_src_0_2, bit<64> key_dst_0_2, bit<64> key_src_1_2, bit<64> key_dst_1_2, bit<64> key_src_2_2, bit<64> key_dst_2_2, 
+                                   bit<2> version) {
 	// Set version
 	meta.version = version;
 
 	// Choose appropriate keys
 	if (version == 0) {
-            meta.key_src = key_src_0;
-	    meta.key_dst = key_dst_0;
+            meta.key_src_1 = key_src_0_1;
+	    meta.key_dst_1 = key_dst_0_1;
+	    meta.key_src_2 = key_src_0_2;
+	    meta.key_dst_2 = key_dst_0_2;
 	}
 	else if (version == 1) {
-            meta.key_src = key_src_1;
-	    meta.key_dst = key_dst_1;
+            meta.key_src_1 = key_src_1_1;
+	    meta.key_dst_1 = key_dst_1_1;
+	    meta.key_src_2 = key_src_1_2;
+	    meta.key_dst_2 = key_dst_1_2;
 	}
 	else {
-            meta.key_src = key_src_2;
-	    meta.key_dst = key_dst_2;
+            meta.key_src_1 = key_src_2_1;
+	    meta.key_dst_1 = key_dst_2_1;
+            meta.key_src_2 = key_src_2_2;
+	    meta.key_dst_2 = key_dst_2_2;
 	}
         
 	// Encrypt IPv4 addresses and add IPv6 header
 	random(meta.nonce , (bit<30>) 0, (bit<30>) ((1 << 30) - 1)); 	
-	sip_hash((bit<64>) meta.nonce);
+	sip_hash((bit<64>) meta.nonce, meta.key_src_1, meta.key_dst_1);
 
 	hdr.ipv4.srcAddr = hdr.ipv4.srcAddr ^ meta.one_time_pad_src;
 	hdr.ipv4.dstAddr = hdr.ipv4.dstAddr ^ meta.one_time_pad_dst;
+
+        sip_hash((bit<64>) meta.nonce, meta.key_src_2, meta.key_dst_2);
 
         hdr.ipv6.setValid();
         hdr.ethernet.etherType = TYPE_IPV6;
@@ -280,7 +283,7 @@ control MyIngress(inout headers hdr,
         meta.needs_dec = 1;
     }
     
-    // Forwards IPv4 packets
+    // Forward IPv4 packets
     action ipv4_forward(macAddr_t dstAddr, egressSpec_t port) {
         standard_metadata.egress_spec = port;
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
@@ -288,7 +291,7 @@ control MyIngress(inout headers hdr,
         hdr.ipv4.ttl = hdr.ipv4.ttl - 1;
     }
 
-    // Forwards IPv6 packets
+    // Forward IPv6 packets
     action ipv6_forward(macAddr_t dstAddr, egressSpec_t port) {
         standard_metadata.egress_spec = port;
         hdr.ethernet.srcAddr = hdr.ethernet.dstAddr;
