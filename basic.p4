@@ -330,17 +330,6 @@ control MyIngress(inout headers hdr,
 	hdr.ipv6.hop_limit = hdr.ipv6.hop_limit - 1;
     }
 
-    table print_tcp {
-        key = {
-	    hdr.tcp.seq_no: exact;   
-        }
-        actions = {
-	    NoAction;
-        }
-        size = 1024;
-        default_action = NoAction;
-    }
-
     table ipv6_lpm {
         key = {
             hdr.ipv6.dstAddr: lpm;
@@ -418,10 +407,6 @@ control MyIngress(inout headers hdr,
     }
     
     apply {
-	if (hdr.tcp.isValid()) {
-            print_tcp.apply();
-        }
-
 	if (hdr.ipv6.isValid()) {
             check_for_decrypt.apply();
 	    do_decrypt.apply();
